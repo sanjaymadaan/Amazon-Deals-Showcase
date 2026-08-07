@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Amazon Deals Showcase</title>
+  <title>Amazon Affiliate Deals</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -12,18 +12,18 @@
 
   <header class="bg-slate-900 text-white px-6 py-4 flex justify-between items-center shadow-md">
     <h1 class="text-xl font-bold tracking-wide flex items-center gap-2">
-      🏷️ Amazon Deals Showcase
+      🏷️ Recommended Amazon Deals
     </h1>
     <button onclick="fetchProducts()" class="bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold px-4 py-2 rounded-lg transition text-sm">
-      🔄 Refresh Deals
+      🔄 Refresh Products
     </button>
   </header>
 
   <main class="max-w-6xl mx-auto p-6">
-    <h2 class="text-2xl font-bold mb-6 border-b pb-2 text-gray-700">Featured Amazon Products</h2>
+    <h2 class="text-2xl font-bold mb-6 border-b pb-2 text-gray-700">Featured Items</h2>
     
     <div id="loading" class="text-center py-12">
-      <p class="text-gray-500 text-lg">Fetching latest deals from Google Sheets...</p>
+      <p class="text-gray-500 text-lg">Fetching products from Google Sheets...</p>
     </div>
 
     <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
@@ -32,11 +32,11 @@
 
   <div id="qr-modal" class="fixed inset-0 bg-black/50 hidden flex justify-center items-center p-4 z-50">
     <div class="bg-white p-6 rounded-xl shadow-xl text-center space-y-4 max-w-sm w-full relative">
-      <h3 class="font-bold text-lg text-gray-800">Scan Code to View Item</h3>
+      <h3 class="font-bold text-lg text-gray-800">Scan Barcode to View Deal</h3>
       
       <div id="qrcode" class="flex justify-center p-4 bg-gray-50 rounded-lg border"></div>
       
-      <p class="text-xs text-gray-500">Scan with any smartphone camera to open your Amazon Associate link.</p>
+      <p class="text-xs text-gray-500">Scan with a mobile camera to open your Amazon Associate link.</p>
 
       <button onclick="closeQrModal()" class="w-full bg-gray-200 hover:bg-gray-300 py-2 rounded-lg text-sm font-semibold transition">
         Close
@@ -46,15 +46,15 @@
 
   <script>
     // ------------------------------------------------------------------
-    // CONFIGURATION: Replace with your actual Google Sheet ID and Tab Name
+    // CONFIGURATION: Insert your Google Sheet ID and Tab Name below
     // ------------------------------------------------------------------
     const SHEET_ID = '1YBDwexq7YKCbq8FkUQ-vuWvmRhQuZUEIJD_80AtSoqU'; 
-    const TAB_NAME = 'Amazon Deals'; 
+    const TAB_NAME = 'Sheet1'; 
 
-    // OpenSheet API endpoint parses public Google Sheets into clean JSON
+    // OpenSheet API URL converts public Google Sheets into JSON
     const API_URL = `https://opensheet.elk.sh/${SHEET_ID}/${TAB_NAME}`;
 
-    // Fetch data from Google Sheet
+    // Fetch products from Google Sheet
     async function fetchProducts() {
       const loadingEl = document.getElementById('loading');
       const gridEl = document.getElementById('product-grid');
@@ -64,17 +64,17 @@
 
       try {
         const response = await fetch(API_URL);
-        if (!response.ok) throw new Error('Network response was not ok');
+        if (!response.ok) throw new Error('Failed to fetch data');
         
         const products = await response.json();
         renderGrid(products);
       } catch (error) {
-        console.error('Error fetching data:', error);
-        loadingEl.innerHTML = `<p class="text-red-500">Failed to load product data. Please check your Google Sheet ID and sharing permissions.</p>`;
+        console.error('Error:', error);
+        loadingEl.innerHTML = `<p class="text-red-500">Could not load products. Please check your Google Sheet ID and sharing settings.</p>`;
       }
     }
 
-    // Render products into the layout
+    // Render HTML Cards matching your specific Google Sheet fields
     function renderGrid(products) {
       const grid = document.getElementById('product-grid');
       const loading = document.getElementById('loading');
@@ -87,20 +87,26 @@
       grid.innerHTML = products.map(p => `
         <div class="bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition flex flex-col justify-between">
           <div>
-            <div class="h-48 w-full p-4 bg-gray-50 flex items-center justify-center">
-              <img src="${p.Image}" alt="${p.Title}" class="max-h-full object-contain" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">
+            <div class="h-48 w-full p-4 bg-gray-50 flex items-center justify-center relative">
+              ${p.Category ? `<span class="absolute top-2 left-2 bg-slate-900 text-amber-400 text-xs font-semibold px-2.5 py-1 rounded-md shadow">${p.Category}</span>` : ''}
+              <img src="${p.ImageURL}" alt="${p.ProductName}" class="max-h-full object-contain" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">
             </div>
+            
             <div class="p-4 space-y-2">
-              <h3 class="font-bold text-gray-900 line-clamp-2 leading-snug" title="${p.Title}">${p.Title}</h3>
-              <p class="text-amber-600 font-extrabold text-lg">${p.Price}</p>
+              <h3 class="font-bold text-gray-900 line-clamp-1 leading-snug" title="${p.ProductName}">
+                ${p.ProductName || 'Amazon Product'}
+              </h3>
+              <p class="text-gray-600 text-sm line-clamp-2 leading-relaxed">
+                ${p.Description || 'No description provided.'}
+              </p>
             </div>
           </div>
           
           <div class="p-4 pt-0 flex gap-2">
-            <a href="${p.Link}" target="_blank" rel="noopener noreferrer" class="flex-1 bg-amber-400 hover:bg-amber-500 text-slate-900 text-center py-2 text-sm font-bold rounded-lg transition">
+            <a href="${p.AffiliateLink}" target="_blank" rel="noopener noreferrer" class="flex-1 bg-amber-400 hover:bg-amber-500 text-slate-900 text-center py-2 text-sm font-bold rounded-lg transition">
               Buy on Amazon
             </a>
-            <button onclick="showQRCode('${p.Link}')" class="bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg text-sm border" title="Share Barcode/QR Code">
+            <button onclick="showQRCode('${p.AffiliateLink}')" class="bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg text-sm border" title="Share Barcode/QR Code">
               📱
             </button>
           </div>
@@ -111,10 +117,10 @@
       grid.classList.remove('hidden');
     }
 
-    // Display QR Code Modal
+    // Show QR Barcode Modal
     function showQRCode(link) {
       const qrContainer = document.getElementById('qrcode');
-      qrContainer.innerHTML = ''; // Clear previous QR
+      qrContainer.innerHTML = ''; // Reset modal QR container
       
       new QRCode(qrContainer, {
         text: link,
@@ -127,12 +133,12 @@
       document.getElementById('qr-modal').classList.remove('hidden');
     }
 
-    // Close QR Code Modal
+    // Hide QR Barcode Modal
     function closeQrModal() {
       document.getElementById('qr-modal').classList.add('hidden');
     }
 
-    // Initial load when page opens
+    // Load products on initial page load
     fetchProducts();
   </script>
 </body>
