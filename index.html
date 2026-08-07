@@ -3,32 +3,40 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Amazon Affiliate Deals</title>
+  <title>Amazon Deals Showcase</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
-<body class="bg-gray-100 text-gray-800 font-sans min-h-screen">
+<body class="bg-gray-100 text-gray-800 font-sans min-h-screen flex flex-col justify-between">
 
-  <header class="bg-slate-900 text-white px-6 py-4 flex justify-between items-center shadow-md">
-    <h1 class="text-xl font-bold tracking-wide flex items-center gap-2">
-      🏷️ Recommended Amazon Deals
-    </h1>
-    <button onclick="fetchProducts()" class="bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold px-4 py-2 rounded-lg transition text-sm">
-      🔄 Refresh Products
-    </button>
-  </header>
+  <div>
+    <header class="bg-slate-900 text-white px-6 py-4 flex justify-between items-center shadow-md">
+      <h1 class="text-xl font-bold tracking-wide flex items-center gap-2">
+        🏷️ Amazon Deals Showcase
+      </h1>
+      <button onclick="fetchProducts()" class="bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold px-4 py-2 rounded-lg transition text-sm flex items-center gap-1">
+        🔄 Refresh Products
+      </button>
+    </header>
 
-  <main class="max-w-6xl mx-auto p-6">
-    <h2 class="text-2xl font-bold mb-6 border-b pb-2 text-gray-700">Featured Items</h2>
-    
-    <div id="loading" class="text-center py-12">
-      <p class="text-gray-500 text-lg">Fetching products from Google Sheets...</p>
-    </div>
-
-    <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
+    <main class="max-w-6xl mx-auto p-6">
+      <h2 class="text-2xl font-bold mb-6 border-b pb-2 text-gray-700">Recommended Deals</h2>
+      
+      <div id="loading" class="text-center py-12">
+        <p class="text-gray-500 text-lg">Fetching products from Google Sheets...</p>
       </div>
-  </main>
+
+      <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
+        </div>
+    </main>
+  </div>
+
+  <footer class="bg-white border-t py-6 text-center text-xs text-gray-500 mt-12">
+    <p class="max-w-xl mx-auto px-4">
+      As an Amazon Associate, I earn from qualifying purchases. Product prices and availability are accurate as of the date/time indicated and are subject to change.
+    </p>
+  </footer>
 
   <div id="qr-modal" class="fixed inset-0 bg-black/50 hidden flex justify-center items-center p-4 z-50">
     <div class="bg-white p-6 rounded-xl shadow-xl text-center space-y-4 max-w-sm w-full relative">
@@ -51,10 +59,45 @@
     const SHEET_ID = '1YBDwexq7YKCbq8FkUQ-vuWvmRhQuZUEIJD_80AtSoqU'; 
     const TAB_NAME = 'Sheet1'; 
 
-    // OpenSheet API URL converts public Google Sheets into JSON
-    const API_URL = `https://opensheet.elk.sh/${SHEET_ID}/${TAB_NAME}`;
+    // Direct Google CSV export URL (no third-party server needed)
+    const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(TAB_NAME)}`;
 
-    // Fetch products from Google Sheet
+    // CSV Parser that handles double quotes and commas safely
+    function parseCSV(text) {
+      const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+      if (lines.length < 2) return [];
+
+      function splitRow(row) {
+        const result = [];
+        let insideQuote = false;
+        let entry = '';
+        for (let i = 0; i < row.length; i++) {
+          const char = row[i];
+          if (char === '"' && (i === 0 || row[i-1] !== '\\')) {
+            insideQuote = !insideQuote;
+          } else if (char === ',' && !insideQuote) {
+            result.push(entry.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+            entry = '';
+          } else {
+            entry += char;
+          }
+        }
+        result.push(entry.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+        return result;
+      }
+
+      const headers = splitRow(lines[0]);
+      return lines.slice(1).map(line => {
+        const values = splitRow(line);
+        const row = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] || '';
+        });
+        return row;
+      });
+    }
+
+    // Fetch product data directly from Google Sheets
     async function fetchProducts() {
       const loadingEl = document.getElementById('loading');
       const gridEl = document.getElementById('product-grid');
@@ -63,18 +106,19 @@
       gridEl.classList.add('hidden');
 
       try {
-        const response = await fetch(API_URL);
-        if (!response.ok) throw new Error('Failed to fetch data');
+        const response = await fetch(CSV_URL);
+        if (!response.ok) throw new Error('Failed to fetch Google Sheet CSV');
         
-        const products = await response.json();
+        const csvText = await response.text();
+        const products = parseCSV(csvText);
         renderGrid(products);
       } catch (error) {
-        console.error('Error:', error);
-        loadingEl.innerHTML = `<p class="text-red-500">Could not load products. Please check your Google Sheet ID and sharing settings.</p>`;
+        console.error('Error fetching data:', error);
+        loadingEl.innerHTML = `<p class="text-red-500 px-4">Could not load products. Please ensure your Google Sheet access is set to <b>"Anyone with the link can view"</b>.</p>`;
       }
     }
 
-    // Render HTML Cards matching your specific Google Sheet fields
+    // Render product cards using your specified sheet headers
     function renderGrid(products) {
       const grid = document.getElementById('product-grid');
       const loading = document.getElementById('loading');
@@ -97,7 +141,7 @@
                 ${p.ProductName || 'Amazon Product'}
               </h3>
               <p class="text-gray-600 text-sm line-clamp-2 leading-relaxed">
-                ${p.Description || 'No description provided.'}
+                ${p.Description || 'No description available.'}
               </p>
             </div>
           </div>
@@ -117,10 +161,10 @@
       grid.classList.remove('hidden');
     }
 
-    // Show QR Barcode Modal
+    // Display QR Code
     function showQRCode(link) {
       const qrContainer = document.getElementById('qrcode');
-      qrContainer.innerHTML = ''; // Reset modal QR container
+      qrContainer.innerHTML = ''; 
       
       new QRCode(qrContainer, {
         text: link,
@@ -133,12 +177,12 @@
       document.getElementById('qr-modal').classList.remove('hidden');
     }
 
-    // Hide QR Barcode Modal
+    // Close QR Code Modal
     function closeQrModal() {
       document.getElementById('qr-modal').classList.add('hidden');
     }
 
-    // Load products on initial page load
+    // Initialize Page
     fetchProducts();
   </script>
 </body>
