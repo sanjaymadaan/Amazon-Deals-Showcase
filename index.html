@@ -29,7 +29,7 @@
               type="text" 
               id="search-input" 
               oninput="handleSearchInput()" 
-              placeholder="Search products by title or description..." 
+              placeholder="Search products..." 
               class="w-full bg-slate-800 text-white placeholder-gray-400 text-sm rounded-lg pl-9 pr-4 py-2 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
             <span class="absolute left-3 top-2.5 text-gray-400 text-sm">🔍</span>
@@ -57,11 +57,12 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col md:flex-row gap-6">
 
       <aside id="sidebar" class="w-full md:w-64 flex-shrink-0 hidden md:block">
-        <div class="bg-white rounded-xl shadow-sm border p-4 sticky top-20">
+        <div class="bg-white rounded-xl shadow-sm border p-4 sticky top-20 max-h-[80vh] overflow-y-auto">
           <h2 class="font-bold text-gray-800 text-base mb-3 pb-2 border-b flex items-center justify-between">
             <span>Categories</span>
             <span id="total-count" class="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full">0</span>
           </h2>
+          
           <nav id="category-list" class="space-y-1 text-sm">
             </nav>
         </div>
@@ -69,7 +70,10 @@
 
       <main class="flex-1">
         <div class="flex justify-between items-center mb-6 border-b pb-3">
-          <h2 id="active-category-title" class="text-2xl font-bold text-gray-800">All Products</h2>
+          <div>
+            <h2 id="active-category-title" class="text-2xl font-bold text-gray-800">All Products</h2>
+            <p id="active-subcategory-subtitle" class="text-xs text-amber-600 font-semibold hidden mt-0.5"></p>
+          </div>
           <span id="results-count" class="text-sm text-gray-500 font-medium">Showing 0 products</span>
         </div>
 
@@ -83,8 +87,8 @@
 
         <div id="no-results" class="hidden text-center py-16 bg-white rounded-xl border shadow-sm">
           <p class="text-4xl mb-2">🔍</p>
-          <p class="text-lg font-bold text-gray-700">No products match your search or category.</p>
-          <p class="text-sm text-gray-500 mt-1">Try resetting the filter or search query.</p>
+          <p class="text-lg font-bold text-gray-700">No products match your selection.</p>
+          <p class="text-sm text-gray-500 mt-1">Try selecting another category or resetting the search filter.</p>
         </div>
       </main>
 
@@ -110,11 +114,8 @@
   <div id="qr-modal" class="fixed inset-0 bg-black/50 hidden flex justify-center items-center p-4 z-50">
     <div class="bg-white p-6 rounded-xl shadow-xl text-center space-y-4 max-w-sm w-full relative">
       <h3 class="font-bold text-lg text-gray-800">Scan Barcode to View Deal</h3>
-      
       <div id="qrcode" class="flex justify-center p-4 bg-gray-50 rounded-lg border"></div>
-      
-      <p class="text-xs text-gray-500">Scan with any smartphone camera to open your Amazon Associate link.</p>
-
+      <p class="text-xs text-gray-500">Scan with any smartphone camera to open your Amazon link.</p>
       <button onclick="closeQrModal()" class="w-full bg-gray-200 hover:bg-gray-300 py-2 rounded-lg text-sm font-semibold transition">
         Close
       </button>
@@ -123,32 +124,28 @@
 
   <script>
     // ------------------------------------------------------------------
-    // CONFIGURATION: Customize your Google Sheet & WhatsApp Details
+    // CONFIGURATION
     // ------------------------------------------------------------------
     const SHEET_ID = '1YBDwexq7YKCbq8FkUQ-vuWvmRhQuZUEIJD_80AtSoqU'; 
     const TAB_NAME = 'Sheet1'; 
-    
-    // Enter your WhatsApp phone number with Country Code (e.g., '15551234567' or '919876543210')
-    const WHATSAPP_NUMBER = '919569452043'; 
+    const WHATSAPP_NUMBER = '+91-9569452043'; 
 
-    // Google Sheets CSV direct URL
     const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(TAB_NAME)}`;
 
-    // State Management
+    // App State
     let allProducts = [];
     let activeCategory = 'All';
+    let activeSubCategory = 'All';
+    let expandedCategories = new Set(); // Stores expanded category names
     let searchQuery = '';
 
-    // Initialize WhatsApp links with encoded message
     function initWhatsApp() {
       const defaultMsg = encodeURIComponent("Hi! I came across your Amazon Deals showcase website and have a question.");
       const waUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${defaultMsg}`;
-      
       document.getElementById('header-whatsapp-btn').href = waUrl;
       document.getElementById('floating-whatsapp-btn').href = waUrl;
     }
 
-    // Parse CSV helper function
     function parseCSV(text) {
       const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
       if (lines.length < 2) return [];
@@ -183,7 +180,6 @@
       });
     }
 
-    // Fetch product data from Google Sheets
     async function fetchProducts() {
       const loadingEl = document.getElementById('loading');
       const gridEl = document.getElementById('product-grid');
@@ -204,49 +200,135 @@
         applyFilters();
       } catch (error) {
         console.error('Error:', error);
-        loadingEl.innerHTML = `<p class="text-red-500 px-4">Could not load products. Please check your Google Sheet sharing permissions.</p>`;
+        loadingEl.innerHTML = `<p class="text-red-500 px-4">Could not load products. Please check your Google Sheet settings.</p>`;
       }
     }
 
-    // Build categories navigation dynamically
+    // Build Category and Subcategory Accordion Navigation
     function buildCategorySidebar() {
       const categoryListEl = document.getElementById('category-list');
       const totalCountEl = document.getElementById('total-count');
 
       totalCountEl.textContent = allProducts.length;
 
-      // Extract unique categories and count items per category
-      const counts = {};
+      // Group products: { [Category]: { count: number, subcategories: { [SubCategory]: count } } }
+      const tree = {};
+
       allProducts.forEach(p => {
-        const cat = p.Category ? p.Category.trim() : 'Uncategorized';
-        counts[cat] = (counts[cat] || 0) + 1;
+        const cat = p.Category ? p.Category.trim() : 'General';
+        const subCat = p.SubCategory ? p.SubCategory.trim() : '';
+
+        if (!tree[cat]) {
+          tree[cat] = { count: 0, subcategories: {} };
+        }
+        tree[cat].count++;
+
+        if (subCat) {
+          tree[cat].subcategories[subCat] = (tree[cat].subcategories[subCat] || 0) + 1;
+        }
       });
 
-      const categories = ['All', ...Object.keys(counts)];
+      // Build HTML for "All Products" option
+      let html = `
+        <button 
+          onclick="selectCategory('All', 'All')" 
+          class="w-full text-left px-3 py-2 rounded-lg flex items-center justify-between font-medium transition ${
+            activeCategory === 'All' 
+              ? 'bg-amber-500 text-slate-900 font-bold shadow-sm' 
+              : 'text-gray-600 hover:bg-gray-100'
+          }">
+          <span>All Products</span>
+          <span class="text-xs px-2 py-0.5 rounded-full ${activeCategory === 'All' ? 'bg-slate-900 text-amber-400' : 'bg-gray-100 text-gray-500'}">${allProducts.length}</span>
+        </button>
+      `;
 
-      categoryListEl.innerHTML = categories.map(cat => {
-        const count = cat === 'All' ? allProducts.length : counts[cat];
-        const isActive = cat === activeCategory;
-        
-        return `
-          <button 
-            onclick="selectCategory('${cat}')" 
-            class="w-full text-left px-3 py-2 rounded-lg flex items-center justify-between font-medium transition ${
-              isActive 
-                ? 'bg-amber-500 text-slate-900 font-bold shadow-sm' 
-                : 'text-gray-600 hover:bg-gray-100'
-            }">
-            <span>${cat}</span>
-            <span class="text-xs px-2 py-0.5 rounded-full ${isActive ? 'bg-slate-900 text-amber-400' : 'bg-gray-100 text-gray-500'}">${count}</span>
-          </button>
+      // Build HTML for each Category & its Subcategories
+      Object.keys(tree).forEach(cat => {
+        const catData = tree[cat];
+        const hasSubcats = Object.keys(catData.subcategories).length > 0;
+        const isCatActive = activeCategory === cat;
+        const isExpanded = expandedCategories.has(cat);
+
+        html += `
+          <div class="space-y-1 pt-1">
+            <div class="flex items-center justify-between rounded-lg ${isCatActive && activeSubCategory === 'All' ? 'bg-amber-500 text-slate-900 font-bold shadow-sm' : 'text-gray-700 hover:bg-gray-100'}">
+              
+              <button 
+                onclick="selectCategory('${cat}', 'All')" 
+                class="flex-1 text-left px-3 py-2 font-medium truncate">
+                ${cat}
+              </button>
+
+              <div class="flex items-center gap-1 pr-2">
+                <span class="text-xs px-2 py-0.5 rounded-full ${isCatActive && activeSubCategory === 'All' ? 'bg-slate-900 text-amber-400' : 'bg-gray-100 text-gray-500'}">
+                  ${catData.count}
+                </span>
+                ${hasSubcats ? `
+                  <button onclick="toggleCategoryAccordion('${cat}')" class="p-1 hover:text-black text-gray-400">
+                    ${isExpanded ? '▼' : '▶'}
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+
+            ${hasSubcats && isExpanded ? `
+              <div class="pl-4 space-y-1 border-l-2 border-amber-200 ml-3 my-1">
+                ${Object.keys(catData.subcategories).map(subCat => {
+                  const isSubActive = isCatActive && activeSubCategory === subCat;
+                  const count = catData.subcategories[subCat];
+                  return `
+                    <button 
+                      onclick="selectCategory('${cat}', '${subCat}')" 
+                      class="w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center justify-between transition ${
+                        isSubActive 
+                          ? 'bg-amber-100 text-amber-900 font-bold' 
+                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                      }">
+                      <span class="truncate">└ ${subCat}</span>
+                      <span class="text-[10px] px-1.5 py-0.2 rounded ${isSubActive ? 'bg-amber-200 text-amber-900' : 'bg-gray-100 text-gray-400'}">${count}</span>
+                    </button>
+                  `;
+                }).join('')}
+              </div>
+            ` : ''}
+          </div>
         `;
-      }).join('');
+      });
+
+      categoryListEl.innerHTML = html;
     }
 
-    // Category click handler
-    function selectCategory(cat) {
+    // Toggle Category Expansion
+    function toggleCategoryAccordion(cat) {
+      if (expandedCategories.has(cat)) {
+        expandedCategories.delete(cat);
+      } else {
+        expandedCategories.add(cat);
+      }
+      buildCategorySidebar();
+    }
+
+    // Category and Subcategory selection handler
+    function selectCategory(cat, subCat = 'All') {
       activeCategory = cat;
+      activeSubCategory = subCat;
+
+      // Automatically expand category if selected
+      if (cat !== 'All') {
+        expandedCategories.add(cat);
+      }
+
+      // Update titles
       document.getElementById('active-category-title').textContent = cat === 'All' ? 'All Products' : cat;
+      
+      const subTitleEl = document.getElementById('active-subcategory-subtitle');
+      if (subCat !== 'All') {
+        subTitleEl.textContent = `Subcategory: ${subCat}`;
+        subTitleEl.classList.remove('hidden');
+      } else {
+        subTitleEl.classList.add('hidden');
+      }
+
       buildCategorySidebar();
       applyFilters();
     }
@@ -257,21 +339,23 @@
       applyFilters();
     }
 
-    // Filter products based on Category & Search Query
+    // Filter products by Category, SubCategory, and Search Query
     function applyFilters() {
       const filtered = allProducts.filter(p => {
-        const matchesCategory = activeCategory === 'All' || (p.Category && p.Category.trim() === activeCategory);
+        const matchesCat = activeCategory === 'All' || (p.Category && p.Category.trim() === activeCategory);
+        const matchesSubCat = activeSubCategory === 'All' || (p.SubCategory && p.SubCategory.trim() === activeSubCategory);
+        
         const matchesSearch = !searchQuery || 
           (p.ProductName && p.ProductName.toLowerCase().includes(searchQuery)) ||
           (p.Description && p.Description.toLowerCase().includes(searchQuery));
-        
-        return matchesCategory && matchesSearch;
+
+        return matchesCat && matchesSubCat && matchesSearch;
       });
 
       renderGrid(filtered);
     }
 
-    // Render Product Cards Grid
+    // Render Product Cards
     function renderGrid(products) {
       const grid = document.getElementById('product-grid');
       const loading = document.getElementById('loading');
@@ -298,7 +382,10 @@
           <div class="bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between group">
             <div>
               <div class="h-48 w-full p-4 bg-gray-50 flex items-center justify-center relative border-b">
-                ${p.Category ? `<span class="absolute top-2 left-2 bg-slate-900 text-amber-400 text-xs font-bold px-2.5 py-1 rounded-md shadow-sm">${p.Category}</span>` : ''}
+                <div class="absolute top-2 left-2 flex flex-col gap-1 items-start">
+                  ${p.Category ? `<span class="bg-slate-900 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">${p.Category}</span>` : ''}
+                  ${p.SubCategory ? `<span class="bg-amber-100 text-amber-800 text-[10px] font-semibold px-2 py-0.5 rounded shadow-sm">${p.SubCategory}</span>` : ''}
+                </div>
                 <img src="${p.ImageURL}" alt="${p.ProductName}" class="max-h-full object-contain transition transform group-hover:scale-105 duration-200" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">
               </div>
               
@@ -331,29 +418,17 @@
       }).join('');
     }
 
-    // Toggle Mobile Sidebar
     function toggleMobileSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      sidebar.classList.toggle('hidden');
+      document.getElementById('sidebar').classList.toggle('hidden');
     }
 
-    // Display QR Code
     function showQRCode(link) {
       const qrContainer = document.getElementById('qrcode');
       qrContainer.innerHTML = ''; 
-      
-      new QRCode(qrContainer, {
-        text: link,
-        width: 160,
-        height: 160,
-        colorDark: "#0f172a",
-        colorLight: "#ffffff"
-      });
-
+      new QRCode(qrContainer, { text: link, width: 160, height: 160, colorDark: "#0f172a", colorLight: "#ffffff" });
       document.getElementById('qr-modal').classList.remove('hidden');
     }
 
-    // Close QR Code Modal
     function closeQrModal() {
       document.getElementById('qr-modal').classList.add('hidden');
     }
