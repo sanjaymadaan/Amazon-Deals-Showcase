@@ -136,7 +136,6 @@
     let allProducts = [];
     let activeCategory = 'All';
     let activeSubCategory = 'All';
-    let expandedCategories = new Set(); // Stores expanded category names
     let searchQuery = '';
 
     function initWhatsApp() {
@@ -204,14 +203,14 @@
       }
     }
 
-    // Build Category and Subcategory Accordion Navigation
+    // Build Category & Subcategory Sidebar with Hover Effect
     function buildCategorySidebar() {
       const categoryListEl = document.getElementById('category-list');
       const totalCountEl = document.getElementById('total-count');
 
       totalCountEl.textContent = allProducts.length;
 
-      // Group products: { [Category]: { count: number, subcategories: { [SubCategory]: count } } }
+      // Group products into category tree
       const tree = {};
 
       allProducts.forEach(p => {
@@ -228,7 +227,7 @@
         }
       });
 
-      // Build HTML for "All Products" option
+      // HTML for "All Products" option
       let html = `
         <button 
           onclick="selectCategory('All', 'All')" 
@@ -242,37 +241,33 @@
         </button>
       `;
 
-      // Build HTML for each Category & its Subcategories
+      // Build Hoverable Categories
       Object.keys(tree).forEach(cat => {
         const catData = tree[cat];
         const hasSubcats = Object.keys(catData.subcategories).length > 0;
         const isCatActive = activeCategory === cat;
-        const isExpanded = expandedCategories.has(cat);
 
         html += `
-          <div class="space-y-1 pt-1">
-            <div class="flex items-center justify-between rounded-lg ${isCatActive && activeSubCategory === 'All' ? 'bg-amber-500 text-slate-900 font-bold shadow-sm' : 'text-gray-700 hover:bg-gray-100'}">
-              
-              <button 
-                onclick="selectCategory('${cat}', 'All')" 
-                class="flex-1 text-left px-3 py-2 font-medium truncate">
-                ${cat}
-              </button>
-
-              <div class="flex items-center gap-1 pr-2">
-                <span class="text-xs px-2 py-0.5 rounded-full ${isCatActive && activeSubCategory === 'All' ? 'bg-slate-900 text-amber-400' : 'bg-gray-100 text-gray-500'}">
+          <div class="group relative space-y-1 pt-1">
+            
+            <button 
+              onclick="selectCategory('${cat}', 'All')" 
+              class="w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition ${
+                isCatActive && activeSubCategory === 'All' 
+                  ? 'bg-amber-500 text-slate-900 font-bold shadow-sm' 
+                  : 'text-gray-700 hover:bg-amber-50 group-hover:text-amber-700'
+              }">
+              <span class="truncate">${cat}</span>
+              <div class="flex items-center gap-1">
+                <span class="text-xs px-2 py-0.5 rounded-full ${isCatActive && activeSubCategory === 'All' ? 'bg-slate-900 text-amber-400' : 'bg-gray-100 text-gray-500 group-hover:bg-amber-100 group-hover:text-amber-800'}">
                   ${catData.count}
                 </span>
-                ${hasSubcats ? `
-                  <button onclick="toggleCategoryAccordion('${cat}')" class="p-1 hover:text-black text-gray-400">
-                    ${isExpanded ? '▼' : '▶'}
-                  </button>
-                ` : ''}
+                ${hasSubcats ? `<span class="text-xs text-gray-400 group-hover:text-amber-600 transition-transform group-hover:translate-x-0.5">›</span>` : ''}
               </div>
-            </div>
+            </button>
 
-            ${hasSubcats && isExpanded ? `
-              <div class="pl-4 space-y-1 border-l-2 border-amber-200 ml-3 my-1">
+            ${hasSubcats ? `
+              <div class="hidden group-hover:block pl-4 space-y-1 border-l-2 border-amber-300 ml-3 py-1 transition-all duration-200">
                 ${Object.keys(catData.subcategories).map(subCat => {
                   const isSubActive = isCatActive && activeSubCategory === subCat;
                   const count = catData.subcategories[subCat];
@@ -282,7 +277,7 @@
                       class="w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center justify-between transition ${
                         isSubActive 
                           ? 'bg-amber-100 text-amber-900 font-bold' 
-                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                          : 'text-gray-500 hover:bg-amber-50 hover:text-amber-800'
                       }">
                       <span class="truncate">└ ${subCat}</span>
                       <span class="text-[10px] px-1.5 py-0.2 rounded ${isSubActive ? 'bg-amber-200 text-amber-900' : 'bg-gray-100 text-gray-400'}">${count}</span>
@@ -291,6 +286,7 @@
                 }).join('')}
               </div>
             ` : ''}
+
           </div>
         `;
       });
@@ -298,27 +294,11 @@
       categoryListEl.innerHTML = html;
     }
 
-    // Toggle Category Expansion
-    function toggleCategoryAccordion(cat) {
-      if (expandedCategories.has(cat)) {
-        expandedCategories.delete(cat);
-      } else {
-        expandedCategories.add(cat);
-      }
-      buildCategorySidebar();
-    }
-
     // Category and Subcategory selection handler
     function selectCategory(cat, subCat = 'All') {
       activeCategory = cat;
       activeSubCategory = subCat;
 
-      // Automatically expand category if selected
-      if (cat !== 'All') {
-        expandedCategories.add(cat);
-      }
-
-      // Update titles
       document.getElementById('active-category-title').textContent = cat === 'All' ? 'All Products' : cat;
       
       const subTitleEl = document.getElementById('active-subcategory-subtitle');
@@ -355,7 +335,7 @@
       renderGrid(filtered);
     }
 
-    // Render Product Cards
+    // Render Product Cards Grid
     function renderGrid(products) {
       const grid = document.getElementById('product-grid');
       const loading = document.getElementById('loading');
