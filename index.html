@@ -148,7 +148,7 @@
       const counterEl = document.getElementById('visitor-count');
       try {
         // You can replace 'my-amazon-deals-showcase' with any unique name key you prefer
-        const response = await fetch('https://api.counterapi.dev/v1/my-amazon-deals-showcase/page-views/up');
+        const response = await fetch('https://api.counterapi.dev/v2/my-amazon-deals-showcase/page-views/up');
         const data = await response.json();
         
         if (data && data.count !== undefined) {
